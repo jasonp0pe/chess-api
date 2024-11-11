@@ -1,1 +1,1 @@
-# housing-api
+# chesspieces-api
