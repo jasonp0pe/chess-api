@@ -97,6 +97,7 @@ app.post('/chess-pieces', upload.single('image'), (req, res) => {
     imagePath = '/images/' + req.file.filename;
   }
 
+  // If no image is uploaded and no image URL is provided, return an error
   if (!imagePath && !value.image) {
     return res.status(400).json({
       success: false,
@@ -133,7 +134,7 @@ app.put('/chess-pieces/:id', upload.single('image'), (req, res) => {
   }
 
   const chessPiece = chessPieces.find(piece => piece._id == id);
-  
+
   if (!chessPiece) {
     return res.status(404).json({
       success: false,
@@ -160,7 +161,7 @@ app.put('/chess-pieces/:id', upload.single('image'), (req, res) => {
 app.delete('/chess-pieces/:id', (req, res) => {
   const { id } = req.params;
   const index = chessPieces.findIndex(piece => piece._id == id);
-  
+
   if (index === -1) {
     return res.status(404).json({
       success: false,
@@ -178,7 +179,7 @@ app.delete('/chess-pieces/:id', (req, res) => {
 
 // API endpoint to fetch chess pieces
 app.get('/chess-pieces', (req, res) => {
-  res.json(chessPieces);
+  res.json(chessPieces); // Send the array as a JSON response
 });
 
 // Home route to display API documentation
