@@ -23,7 +23,6 @@ app.use(express.json()); // Parse JSON bodies
 app.use(express.static(path.join(__dirname, 'public'))); // Serve static files (images)
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
-
 // Array of chess pieces data
 let chessPieces = [
   {
@@ -84,7 +83,6 @@ const chessPieceSchema = Joi.object({
 
 // POST request to add a new chess piece
 app.post('/chess-pieces', upload.single('image'), (req, res) => {
-  // Validate the request body using Joi schema
   const { error, value } = chessPieceSchema.validate(req.body);
 
   if (error) {
@@ -94,13 +92,11 @@ app.post('/chess-pieces', upload.single('image'), (req, res) => {
     });
   }
 
-  // Handle image file if present
   let imagePath = '';
   if (req.file) {
-    imagePath = '/images/' + req.file.filename; // Set the path to the uploaded image
+    imagePath = '/images/' + req.file.filename;
   }
 
-  // If no image was uploaded and no URL is provided, return an error
   if (!imagePath && !value.image) {
     return res.status(400).json({
       success: false,
@@ -108,15 +104,13 @@ app.post('/chess-pieces', upload.single('image'), (req, res) => {
     });
   }
 
-  // If validation is successful, create the new chess piece
   const newChessPiece = {
-    _id: chessPieces.length + 1, // Simple auto-increment logic
+    _id: chessPieces.length + 1,
     name: value.name,
     description: value.description,
-    image: imagePath || value.image // Use uploaded image path or provided URL
+    image: imagePath || value.image
   };
 
-  // Add the new piece to the array
   chessPieces.push(newChessPiece);
 
   res.status(201).json({
@@ -126,9 +120,65 @@ app.post('/chess-pieces', upload.single('image'), (req, res) => {
   });
 });
 
+// PUT request to edit a chess piece
+app.put('/chess-pieces/:id', upload.single('image'), (req, res) => {
+  const { id } = req.params;
+  const { error, value } = chessPieceSchema.validate(req.body);
+
+  if (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.details[0].message
+    });
+  }
+
+  const chessPiece = chessPieces.find(piece => piece._id == id);
+  
+  if (!chessPiece) {
+    return res.status(404).json({
+      success: false,
+      message: 'Chess piece not found.'
+    });
+  }
+
+  // Update chess piece fields
+  chessPiece.name = value.name || chessPiece.name;
+  chessPiece.description = value.description || chessPiece.description;
+  
+  if (req.file) {
+    chessPiece.image = '/images/' + req.file.filename;
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Chess piece updated successfully!',
+    data: chessPiece
+  });
+});
+
+// DELETE request to delete a chess piece
+app.delete('/chess-pieces/:id', (req, res) => {
+  const { id } = req.params;
+  const index = chessPieces.findIndex(piece => piece._id == id);
+  
+  if (index === -1) {
+    return res.status(404).json({
+      success: false,
+      message: 'Chess piece not found.'
+    });
+  }
+
+  chessPieces.splice(index, 1); // Remove the chess piece from the array
+
+  res.status(200).json({
+    success: true,
+    message: 'Chess piece deleted successfully!'
+  });
+});
+
 // API endpoint to fetch chess pieces
 app.get('/chess-pieces', (req, res) => {
-  res.json(chessPieces);  // Send the array as a JSON response
+  res.json(chessPieces);
 });
 
 // Home route to display API documentation
@@ -145,6 +195,10 @@ app.get('/', (req, res) => {
         <a href="/chess-pieces">All Chess Pieces</a>
         <h2>Add New Chess Piece (POST):</h2>
         <p>Send a POST request to <code>/chess-pieces</code> with the required data, including an image.</p>
+        <h2>Edit Chess Piece (PUT):</h2>
+        <p>Send a PUT request to <code>/chess-pieces/:id</code> to edit a specific chess piece.</p>
+        <h2>Delete Chess Piece (DELETE):</h2>
+        <p>Send a DELETE request to <code>/chess-pieces/:id</code> to delete a specific chess piece.</p>
       </body>
     </html>
   `);
