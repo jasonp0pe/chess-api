@@ -1,212 +1,126 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const Joi = require('joi');
-const multer = require('multer');  // Import multer for file handling
-
+const express = require("express");
 const app = express();
+const Joi = require("joi");
+const multer = require("multer");
+app.use(express.static("public"));
+app.use("/uploads", express.static("uploads"));
+app.use(express.json());
+const cors = require("cors");
+app.use(cors());
+const mongoose = require("mongoose");
 
-// Setup multer for image upload
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'public/images'); 
+    cb(null, "./public/images/");
   },
   filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname)); // Save with unique filenames
-  }
+    cb(null, Date.now() + path.extname(file.originalname)); // Unique filename
+  },
 });
+
 const upload = multer({ storage: storage });
 
-// Middleware setup
-app.use(cors());
-app.use(express.json()); // Parse JSON bodies
-app.use(express.static(path.join(__dirname, 'public'))); // Serve static files (images)
-app.use('/images', express.static(path.join(__dirname, 'public/images')));
+mongoose
+  .connect(
+    "mongodb+srv://jjpope:elainejones@cluster0.qxk0l.mongodb.net/chesspieces?retryWrites=true&w=majority"
+  )
 
-// Array of chess pieces data
-let chessPieces = [
-  {
-    _id: 1,
-    name: "King",
-    description: "The King can move one square in any direction.",
-    image: "/images/LightKing.jpg",  
-  },
-  {
-    _id: 2,
-    name: "Queen",
-    description: "The Queen is the most powerful piece on the board.",
-    image: "/images/LightQueen.jpg", 
-  },
-  {
-    _id: 3,
-    name: "Rook",
-    description: "The Rook moves horizontally or vertically through any number of unoccupied squares.",
-    image: "/images/LightRook.jpg",  
-  },
-  {
-    _id: 4,
-    name: "Bishop",
-    description: "The Bishop moves diagonally through any number of unoccupied squares.",
-    image: "/images/LightBishop.jpg", 
-  },
-  {
-    _id: 5,
-    name: "Knight",
-    description: "The Knight moves in an 'L' shape and can jump over other pieces.",
-    image: "/images/LightKnight.jpg", 
-  },
-  {
-    _id: 6,
-    name: "Pawn",
-    description: "The Pawn moves forward one square or two squares on its first move.",
-    image: "/images/LightPawn.jpg", 
-  }
-];
-
-// Joi validation schema for chess piece
-const chessPieceSchema = Joi.object({
-  name: Joi.string().min(3).required().messages({
-    'string.empty': 'Name cannot be empty',
-    'string.min': 'Name must be at least 3 characters long',
-    'any.required': 'Name is required'
-  }),
-  description: Joi.string().min(10).required().messages({
-    'string.empty': 'Description cannot be empty',
-    'string.min': 'Description must be at least 10 characters long',
-    'any.required': 'Description is required'
-  }),
-  image: Joi.string().uri().optional().messages({
-    'string.empty': 'Image cannot be empty',
-    'any.required': 'Image is required'
+  .then(() => {
+    console.log("connected to mongodb");
   })
-});
-
-// POST request to add a new chess piece
-app.post('/chess-pieces', upload.single('image'), (req, res) => {
-  const { error, value } = chessPieceSchema.validate(req.body);
-
-  if (error) {
-    return res.status(400).json({
-      success: false,
-      message: error.details[0].message
-    });
-  }
-
-  let imagePath = '';
-  if (req.file) {
-    imagePath = '/images/' + req.file.filename;
-  }
-
-  // If no image is uploaded and no image URL is provided, return an error
-  if (!imagePath && !value.image) {
-    return res.status(400).json({
-      success: false,
-      message: 'Image is required.'
-    });
-  }
-
-  const newChessPiece = {
-    _id: chessPieces.length + 1,
-    name: value.name,
-    description: value.description,
-    image: imagePath || value.image
-  };
-
-  chessPieces.push(newChessPiece);
-
-  res.status(201).json({
-    success: true,
-    message: 'Chess piece added successfully!',
-    data: newChessPiece
+  .catch((error) => {
+    console.log("couldn't connect to mongodb", error);
   });
+
+// Chess Piece Schema
+const chessPieceSchema = new mongoose.Schema({
+  name: String,
+  description: String,
+  image: String,  // Stores the image path (from public/images)
 });
 
-// PUT request to edit a chess piece
-app.put('/chess-pieces/:id', upload.single('image'), (req, res) => {
-  const { id } = req.params;
-  const { error, value } = chessPieceSchema.validate(req.body);
+const ChessPiece = mongoose.model("ChessPiece", chessPieceSchema);
 
-  if (error) {
-    return res.status(400).json({
-      success: false,
-      message: error.details[0].message
-    });
+// GET request for all chess pieces
+app.get("/chess-pieces", async (req, res) => {
+  const chessPieces = await ChessPiece.find();
+  res.send(chessPieces);
+});
+
+// GET request for a single chess piece by ID
+app.get("/chess-pieces/:id", async (req, res) => {
+  const chessPiece = await ChessPiece.findOne({ _id: id });
+  res.send(chessPiece);
+});
+
+// POST request to add a new chess piece (with image)
+app.post("/chess-pieces", upload.single("img"), async (req, res) => {
+  const result = validateChessPiece(req.body);
+
+  if (result.error) {
+    res.status(400).send(result.error.details[0].message);
+    return;
   }
 
-  const chessPiece = chessPieces.find(piece => piece._id == id);
+  const chessPiece = new ChessPiece({
+    name: req.body.name,
+    description: req.body.description,
+  });
+
+  if (req.file) {
+    chessPiece.image = "/images/" + req.file.filename;  // Store the image path
+  }
+
+  const newChessPiece = await chessPiece.save();
+  res.send(newChessPiece);
+});
+
+// PUT request to edit an existing chess piece (with image update)
+app.put("/chess-pieces/:id", upload.single("image"), async (req, res) => {
+  const result = validateChessPiece(req.body);
+
+  if (result.error) {
+    res.status(400).send(result.error.details[0].message);
+    return;
+  }
+
+  const chessPiece = await ChessPiece.findById(req.params.id);
 
   if (!chessPiece) {
-    return res.status(404).json({
-      success: false,
-      message: 'Chess piece not found.'
-    });
+    return res.status(404).send("Chess piece not found.");
   }
 
-  // Update chess piece fields
-  chessPiece.name = value.name || chessPiece.name;
-  chessPiece.description = value.description || chessPiece.description;
-  
+  chessPiece.name = req.body.name || chessPiece.name;
+  chessPiece.description = req.body.description || chessPiece.description;
+
   if (req.file) {
-    chessPiece.image = '/images/' + req.file.filename;
+    chessPiece.image = "/images/" + req.file.filename;  // Update the image if provided
   }
 
-  res.status(200).json({
-    success: true,
-    message: 'Chess piece updated successfully!',
-    data: chessPiece
-  });
+  await chessPiece.save();
+  res.send(chessPiece);
 });
 
 // DELETE request to delete a chess piece
-app.delete('/chess-pieces/:id', (req, res) => {
-  const { id } = req.params;
-  const index = chessPieces.findIndex(piece => piece._id == id);
-
-  if (index === -1) {
-    return res.status(404).json({
-      success: false,
-      message: 'Chess piece not found.'
-    });
+app.delete("/chess-pieces/:id", async (req, res) => {
+  const chessPiece = await ChessPiece.findByIdAndDelete(req.params.id);
+  if (!chessPiece) {
+    return res.status(404).send("Chess piece not found.");
   }
+  res.send(chessPiece);
+});
 
-  chessPieces.splice(index, 1); // Remove the chess piece from the array
-
-  res.status(200).json({
-    success: true,
-    message: 'Chess piece deleted successfully!'
+// Joi Validation for Chess Piece
+const validateChessPiece = (chessPiece) => {
+  const schema = Joi.object({
+    name: Joi.string().min(3).required(),
+    description: Joi.string().min(10).required(),
+    image: Joi.string().uri().optional(),
   });
-});
 
-// API endpoint to fetch chess pieces
-app.get('/chess-pieces', (req, res) => {
-  res.json(chessPieces); // Send the array as a JSON response
-});
+  return schema.validate(chessPiece);
+};
 
-// Home route to display API documentation
-app.get('/', (req, res) => {
-  res.send(`
-    <html>
-      <head>
-        <title>Chess Pieces API</title>
-        <link rel="stylesheet" href="/style.css"> 
-      </head>
-      <body>
-        <h1>Chess Pieces API</h1>
-        <p>Get All Chess Pieces:</p>
-        <a href="/chess-pieces">All Chess Pieces</a>
-        <h2>Add New Chess Piece (POST):</h2>
-        <p>Send a POST request to <code>/chess-pieces</code> with the required data, including an image.</p>
-        <h2>Edit Chess Piece (PUT):</h2>
-        <p>Send a PUT request to <code>/chess-pieces/:id</code> to edit a specific chess piece.</p>
-        <h2>Delete Chess Piece (DELETE):</h2>
-        <p>Send a DELETE request to <code>/chess-pieces/:id</code> to delete a specific chess piece.</p>
-      </body>
-    </html>
-  `);
-});
-
-// Start the server
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+app.listen(3002, () => {
+  console.log("I'm listening on port 3002");
 });
